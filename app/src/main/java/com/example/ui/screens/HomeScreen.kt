@@ -29,12 +29,14 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material.icons.filled.Speed
-import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.TextFields
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -89,9 +91,11 @@ fun HomeScreen(
     onSelectInputType: (String) -> Unit,
     onViewSession: (DiagnosisSessionEntity) -> Unit,
     onOpenPaywall: () -> Unit,
-    onToggleLanguage: () -> Unit
+    onToggleLanguage: () -> Unit = {},
+    onDeleteSession: ((Long) -> Unit)? = null
 ) {
     val lang = uiState.appLanguage
+    val context = LocalContext.current
     val primaryCar = uiState.primaryCar
 
     LazyColumn(
@@ -105,8 +109,7 @@ fun HomeScreen(
             Spacer(modifier = Modifier.height(8.dp))
             HeaderBar(
                 appLanguage = lang,
-                onReplaySplash = { onNavigate(NavScreen.SPLASH) },
-                onOpenGarage = { onNavigate(NavScreen.CAR_PROFILE) }
+                onReplaySplash = { onNavigate(NavScreen.SPLASH) }
             )
         }
 
@@ -121,13 +124,38 @@ fun HomeScreen(
         item {
             StartDiagnosisHeroCard(
                 appLanguage = lang,
+                isProUser = uiState.isProUser,
                 onStartPhoto = {
-                    onSelectInputType("PHOTO")
-                    onNavigate(NavScreen.DIAGNOSIS_INPUT)
+                    if (!uiState.isProUser) {
+                        val msg = when (lang) {
+                            AppLanguage.RU -> "Сканирование по фото доступно только в PRO версии!"
+                            AppLanguage.PL -> "Skanowanie ze zdjęcia jest dostępne tylko w wersji PRO!"
+                            AppLanguage.EN -> "Photo scanning is available only in PRO version!"
+                            AppLanguage.UA -> "Сканування за фото доступне тільки в PRO версії!"
+                        }
+                        Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                        onSelectInputType("TEXT")
+                        onNavigate(NavScreen.DIAGNOSIS_INPUT)
+                    } else {
+                        onSelectInputType("PHOTO")
+                        onNavigate(NavScreen.DIAGNOSIS_INPUT)
+                    }
                 },
                 onStartVoice = {
-                    onSelectInputType("VOICE")
-                    onNavigate(NavScreen.DIAGNOSIS_INPUT)
+                    if (!uiState.isProUser) {
+                        val msg = when (lang) {
+                            AppLanguage.RU -> "Голосовая диагностика доступна только в PRO версии!"
+                            AppLanguage.PL -> "Diagnostyka głosowa jest dostępna tylko w wersji PRO!"
+                            AppLanguage.EN -> "Voice diagnosis is available only in PRO version!"
+                            AppLanguage.UA -> "Голосова діагностика доступна тільки в PRO версії!"
+                        }
+                        Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                        onSelectInputType("TEXT")
+                        onNavigate(NavScreen.DIAGNOSIS_INPUT)
+                    } else {
+                        onSelectInputType("VOICE")
+                        onNavigate(NavScreen.DIAGNOSIS_INPUT)
+                    }
                 },
                 onStartText = {
                     onSelectInputType("TEXT")
@@ -140,7 +168,9 @@ fun HomeScreen(
             MaintenanceAlertsCard(
                 tasks = uiState.upcomingTasks,
                 appLanguage = lang,
-                onViewAll = { onNavigate(NavScreen.CAR_PROFILE) }
+                isProUser = uiState.isProUser,
+                onViewAll = { onNavigate(NavScreen.CAR_PROFILE) },
+                onOpenPaywall = onOpenPaywall
             )
         }
 
@@ -181,8 +211,10 @@ fun HomeScreen(
             items(uiState.recentSessions) { session ->
                 DiagnosisSessionCard(
                     session = session,
+                    isProUser = uiState.isProUser,
                     appLanguage = lang,
-                    onClick = { onViewSession(session) }
+                    onClick = { onViewSession(session) },
+                    onDelete = if (uiState.isProUser && onDeleteSession != null) { { onDeleteSession(session.id) } } else null
                 )
             }
         }
@@ -196,51 +228,54 @@ fun HomeScreen(
 @Composable
 private fun HeaderBar(
     appLanguage: com.example.ui.AppLanguage,
-    onReplaySplash: () -> Unit,
-    onOpenGarage: () -> Unit
+    onReplaySplash: () -> Unit
 ) {
     Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onReplaySplash() },
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Row(
+        Box(
             modifier = Modifier
-                .weight(1f)
-                .clickable { onReplaySplash() },
-            verticalAlignment = Alignment.CenterVertically
+                .size(42.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .border(1.5.dp, CyberPrimary, RoundedCornerShape(12.dp))
+                .background(CyberSurfaceVariant)
         ) {
-            Box(
-                modifier = Modifier
-                    .size(38.dp)
-                    .clip(RoundedCornerShape(10.dp))
-                    .border(1.dp, CyberPrimary, RoundedCornerShape(10.dp))
-            ) {
-                AsyncImage(
-                    model = R.drawable.img_splash_logo_1786069724298,
-                    contentDescription = "App Logo",
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize()
-                )
-            }
-            Spacer(modifier = Modifier.width(10.dp))
-            Column {
+            AsyncImage(
+                model = R.drawable.img_app_logo_v3_1787825693943,
+                contentDescription = "App Logo",
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize()
+            )
+        }
+        Spacer(modifier = Modifier.width(12.dp))
+        Column {
+            Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     text = "CarDiagnostic AI",
-                    fontSize = 18.sp,
+                    fontSize = 19.sp,
                     fontWeight = FontWeight.ExtraBold,
                     color = CyberPrimary,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
-                Text(
-                    text = Localization.appSubtitle(appLanguage),
-                    fontSize = 11.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
+                Spacer(modifier = Modifier.width(6.dp))
+                Box(
+                    modifier = Modifier
+                        .size(7.dp)
+                        .clip(CircleShape)
+                        .background(CyberPrimary)
                 )
             }
+            Text(
+                text = Localization.appSubtitle(appLanguage),
+                fontSize = 11.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
         }
     }
 }
@@ -252,7 +287,7 @@ private fun CarProfileBanner(
     onSwitchCar: () -> Unit
 ) {
     CyberCard(
-        borderColor = CyberSurfaceBorder,
+        borderColor = CyberPrimary.copy(alpha = 0.35f),
         backgroundColor = CyberSurface
     ) {
         Row(
@@ -268,47 +303,52 @@ private fun CarProfileBanner(
             ) {
                 Box(
                     modifier = Modifier
-                        .size(44.dp)
-                        .clip(CircleShape)
-                        .background(CyberPrimaryContainer),
+                        .size(48.dp)
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(CyberPrimaryContainer)
+                        .border(1.dp, CyberPrimary.copy(alpha = 0.6f), RoundedCornerShape(14.dp)),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
                         imageVector = Icons.Default.DirectionsCar,
                         contentDescription = "Active Car",
                         tint = CyberPrimary,
-                        modifier = Modifier.size(24.dp)
+                        modifier = Modifier.size(26.dp)
                     )
                 }
-                Spacer(modifier = Modifier.width(10.dp))
+                Spacer(modifier = Modifier.width(12.dp))
                 Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = if (car != null) "${car.year} ${car.make} ${car.model}" else if (appLanguage == AppLanguage.RU) "Добавить автомобиль" else "Add Your Vehicle",
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = if (car != null) "${car.year} ${car.make} ${car.model}" else Localization.addVehicleTitle(appLanguage),
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(2.dp))
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         if (car != null) {
                             Icon(
                                 imageVector = Icons.Default.Speed,
                                 contentDescription = "Mileage",
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                tint = CyberPrimary,
                                 modifier = Modifier.size(13.dp)
                             )
                             Spacer(modifier = Modifier.width(4.dp))
                             Text(
                                 text = "${Localization.formatMileage(appLanguage, car.currentMileage)} • ${Localization.translateEngineType(appLanguage, car.engineType)}",
                                 fontSize = 11.sp,
+                                fontWeight = FontWeight.Medium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
                         } else {
                             Text(
-                                text = if (appLanguage == AppLanguage.RU) "Нажмите, чтобы настроить профиль" else "Tap to configure profile",
+                                text = Localization.tapToConfigure(appLanguage),
                                 fontSize = 11.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 maxLines = 1,
@@ -319,15 +359,31 @@ private fun CarProfileBanner(
                 }
             }
 
-            IconButton(
-                onClick = onSwitchCar,
+            Surface(
+                color = CyberPrimary.copy(alpha = 0.12f),
+                shape = RoundedCornerShape(20.dp),
+                border = androidx.compose.foundation.BorderStroke(1.dp, CyberPrimary.copy(alpha = 0.4f)),
                 modifier = Modifier.testTag("switch_car_button")
             ) {
-                Icon(
-                    imageVector = Icons.Default.ChevronRight,
-                    contentDescription = "Switch Car Profile",
-                    tint = CyberPrimary
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .clickable { onSwitchCar() }
+                        .padding(horizontal = 10.dp, vertical = 6.dp)
+                ) {
+                    Text(
+                        text = Localization.garageLabel(appLanguage),
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = CyberPrimary
+                    )
+                    Icon(
+                        imageVector = Icons.Default.ChevronRight,
+                        contentDescription = "Switch Car Profile",
+                        tint = CyberPrimary,
+                        modifier = Modifier.size(14.dp)
+                    )
+                }
             }
         }
     }
@@ -336,6 +392,7 @@ private fun CarProfileBanner(
 @Composable
 private fun StartDiagnosisHeroCard(
     appLanguage: com.example.ui.AppLanguage,
+    isProUser: Boolean,
     onStartPhoto: () -> Unit,
     onStartVoice: () -> Unit,
     onStartText: () -> Unit
@@ -408,10 +465,11 @@ private fun StartDiagnosisHeroCard(
                 Button(
                     onClick = onStartPhoto,
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = CyberPrimary,
-                        contentColor = Color.Black
+                        containerColor = if (isProUser) CyberPrimary else CyberSurfaceVariant,
+                        contentColor = if (isProUser) Color.Black else MaterialTheme.colorScheme.onSurfaceVariant
                     ),
                     shape = RoundedCornerShape(12.dp),
+                    border = if (!isProUser) androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFF59E0B).copy(alpha = 0.5f)) else null,
                     contentPadding = PaddingValues(vertical = 8.dp, horizontal = 2.dp),
                     modifier = Modifier
                         .weight(1f)
@@ -419,8 +477,9 @@ private fun StartDiagnosisHeroCard(
                 ) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Icon(
-                            imageVector = Icons.Default.CameraAlt,
+                            imageVector = if (!isProUser) Icons.Default.Lock else Icons.Default.CameraAlt,
                             contentDescription = "Photo Scan",
+                            tint = if (!isProUser) Color(0xFFF59E0B) else Color.Unspecified,
                             modifier = Modifier.size(20.dp)
                         )
                         Spacer(modifier = Modifier.height(2.dp))
@@ -437,10 +496,11 @@ private fun StartDiagnosisHeroCard(
                 Button(
                     onClick = onStartVoice,
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = CyberSecondary,
-                        contentColor = Color.Black
+                        containerColor = if (isProUser) CyberSecondary else CyberSurfaceVariant,
+                        contentColor = if (isProUser) Color.Black else MaterialTheme.colorScheme.onSurfaceVariant
                     ),
                     shape = RoundedCornerShape(12.dp),
+                    border = if (!isProUser) androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFF59E0B).copy(alpha = 0.5f)) else null,
                     contentPadding = PaddingValues(vertical = 8.dp, horizontal = 2.dp),
                     modifier = Modifier
                         .weight(1f)
@@ -448,8 +508,9 @@ private fun StartDiagnosisHeroCard(
                 ) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Icon(
-                            imageVector = Icons.Default.Mic,
+                            imageVector = if (!isProUser) Icons.Default.Lock else Icons.Default.Mic,
                             contentDescription = "Voice Input",
+                            tint = if (!isProUser) Color(0xFFF59E0B) else Color.Unspecified,
                             modifier = Modifier.size(20.dp)
                         )
                         Spacer(modifier = Modifier.height(2.dp))
@@ -466,11 +527,10 @@ private fun StartDiagnosisHeroCard(
                 Button(
                     onClick = onStartText,
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = CyberSurfaceVariant,
-                        contentColor = CyberPrimary
+                        containerColor = CyberPrimary,
+                        contentColor = Color.Black
                     ),
                     shape = RoundedCornerShape(12.dp),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, CyberPrimary),
                     contentPadding = PaddingValues(vertical = 8.dp, horizontal = 2.dp),
                     modifier = Modifier
                         .weight(1f)
@@ -501,13 +561,16 @@ private fun StartDiagnosisHeroCard(
 private fun MaintenanceAlertsCard(
     tasks: List<MaintenanceTaskEntity>,
     appLanguage: com.example.ui.AppLanguage,
-    onViewAll: () -> Unit
+    isProUser: Boolean,
+    onViewAll: () -> Unit,
+    onOpenPaywall: () -> Unit
 ) {
     val pendingTasks = tasks.filter { !it.isCompleted }
 
     CyberCard(
-        borderColor = CyberSurfaceBorder,
-        backgroundColor = CyberSurface
+        borderColor = if (!isProUser) CyberPrimary.copy(alpha = 0.5f) else CyberSurfaceBorder,
+        backgroundColor = if (!isProUser) CyberPrimaryContainer.copy(alpha = 0.12f) else CyberSurface,
+        onClick = if (!isProUser) onOpenPaywall else null
     ) {
         Column {
             Row(
@@ -517,9 +580,9 @@ private fun MaintenanceAlertsCard(
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(
-                        imageVector = Icons.Default.NotificationsActive,
+                        imageVector = if (!isProUser) Icons.Default.Lock else Icons.Default.NotificationsActive,
                         contentDescription = "Maintenance",
-                        tint = CyberTertiary,
+                        tint = CyberPrimary,
                         modifier = Modifier.size(20.dp)
                     )
                     Spacer(modifier = Modifier.width(8.dp))
@@ -531,18 +594,30 @@ private fun MaintenanceAlertsCard(
                     )
                 }
 
-                Text(
-                    text = Localization.tasksDue(appLanguage, pendingTasks.size),
-                    fontSize = 12.sp,
-                    color = CyberTertiary,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.clickable { onViewAll() }
-                )
+                Surface(
+                    color = CyberPrimary,
+                    shape = RoundedCornerShape(6.dp)
+                ) {
+                    Text(
+                        text = if (!isProUser) "PRO" else Localization.tasksDue(appLanguage, pendingTasks.size),
+                        fontSize = 11.sp,
+                        color = Color.Black,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                    )
+                }
             }
 
             Spacer(modifier = Modifier.height(10.dp))
 
-            if (pendingTasks.isEmpty()) {
+            if (!isProUser) {
+                Text(
+                    text = Localization.proServiceNotice(appLanguage),
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            } else if (pendingTasks.isEmpty()) {
                 Text(
                     text = Localization.allServiceUpToDate(appLanguage),
                     fontSize = 13.sp,
@@ -584,8 +659,10 @@ private fun MaintenanceAlertsCard(
 @Composable
 fun DiagnosisSessionCard(
     session: DiagnosisSessionEntity,
+    isProUser: Boolean = false,
     appLanguage: com.example.ui.AppLanguage = com.example.ui.AppLanguage.RU,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    onDelete: (() -> Unit)? = null
 ) {
     val dateStr = SimpleDateFormat("MMM dd, yyyy", Locale.getDefault()).format(Date(session.timestamp))
 
@@ -602,11 +679,29 @@ fun DiagnosisSessionCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 SeverityBadge(severity = session.severity, appLanguage = appLanguage)
-                Text(
-                    text = dateStr,
-                    fontSize = 12.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = dateStr,
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    if (isProUser && onDelete != null) {
+                        Spacer(modifier = Modifier.width(6.dp))
+                        IconButton(
+                            onClick = onDelete,
+                            modifier = Modifier
+                                .size(24.dp)
+                                .testTag("delete_session_button_${session.id}")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.DeleteOutline,
+                                contentDescription = "Delete",
+                                tint = MaterialTheme.colorScheme.error.copy(alpha = 0.8f),
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                    }
+                }
             }
 
             Spacer(modifier = Modifier.height(8.dp))
@@ -624,7 +719,8 @@ fun DiagnosisSessionCard(
                 text = Localization.translatePlainExplanation(appLanguage, session.plainExplanation),
                 fontSize = 13.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 2
+                maxLines = if (isProUser) 2 else 1,
+                overflow = TextOverflow.Ellipsis
             )
 
             Spacer(modifier = Modifier.height(10.dp))
@@ -635,14 +731,19 @@ fun DiagnosisSessionCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Surface(
-                    color = CyberPrimaryContainer,
-                    shape = RoundedCornerShape(8.dp)
+                    color = if (isProUser) CyberPrimaryContainer else CyberSurfaceVariant,
+                    shape = RoundedCornerShape(8.dp),
+                    border = if (!isProUser) androidx.compose.foundation.BorderStroke(1.dp, CyberSurfaceBorder) else null
                 ) {
                     Text(
-                        text = Localization.estRepairCost(appLanguage, Localization.translateCostRange(appLanguage, session.estimatedCostRange)),
-                        fontSize = 12.sp,
+                        text = if (isProUser) {
+                            Localization.estRepairCost(appLanguage, Localization.translateCostRange(appLanguage, session.estimatedCostRange))
+                        } else {
+                            "🔒 ${Localization.costProOnly(appLanguage)}"
+                        },
+                        fontSize = 11.sp,
                         fontWeight = FontWeight.Bold,
-                        color = CyberPrimary,
+                        color = if (isProUser) CyberPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                     )
                 }

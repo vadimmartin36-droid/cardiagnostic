@@ -3,6 +3,7 @@ package com.example.ui.screens
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -18,15 +19,25 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.DeleteOutline
+import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -46,21 +57,26 @@ import com.example.ui.components.CyberCard
 import com.example.ui.theme.CyberBackground
 import com.example.ui.theme.CyberPrimary
 import com.example.ui.theme.CyberPrimaryContainer
+import com.example.ui.theme.CyberSecondary
 import com.example.ui.theme.CyberSurface
 import com.example.ui.theme.CyberSurfaceBorder
 import com.example.ui.theme.CyberSurfaceVariant
-
 import com.example.ui.Localization
 
 @Composable
 fun HistoryScreen(
     uiState: AppUiState,
     onNavigate: (NavScreen) -> Unit,
-    onViewSession: (DiagnosisSessionEntity) -> Unit
+    onViewSession: (DiagnosisSessionEntity) -> Unit,
+    onDeleteSession: (Long) -> Unit = {},
+    onClearAllSessions: () -> Unit = {},
+    onOpenPaywall: () -> Unit = { onNavigate(NavScreen.PAYWALL) }
 ) {
     val lang = uiState.appLanguage
     var searchQuery by remember { mutableStateOf("") }
     var selectedSeverityFilter by remember { mutableStateOf("ALL") }
+    var sessionToDelete by remember { mutableStateOf<DiagnosisSessionEntity?>(null) }
+    var showClearAllDialog by remember { mutableStateOf(false) }
 
     val filteredSessions = uiState.allSessions.filter { session ->
         val matchesSearch = searchQuery.isBlank() ||
@@ -76,6 +92,98 @@ fun HistoryScreen(
         }
 
         matchesSearch && matchesSeverity
+    }
+
+    // Confirmation dialog for single session deletion (PRO)
+    sessionToDelete?.let { session ->
+        AlertDialog(
+            onDismissRequest = { sessionToDelete = null },
+            containerColor = CyberSurface,
+            titleContentColor = MaterialTheme.colorScheme.onSurface,
+            textContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+            title = {
+                Text(
+                    text = Localization.deleteReportConfirmTitle(lang),
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 17.sp
+                )
+            },
+            text = {
+                Text(
+                    text = Localization.deleteReportConfirmMessage(lang),
+                    fontSize = 14.sp
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        onDeleteSession(session.id)
+                        sessionToDelete = null
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                    modifier = Modifier.testTag("confirm_delete_button")
+                ) {
+                    Text(text = Localization.deleteReport(lang), fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { sessionToDelete = null },
+                    modifier = Modifier.testTag("cancel_delete_button")
+                ) {
+                    Text(
+                        text = if (lang == com.example.ui.AppLanguage.RU) "Отмена" else "Cancel",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        )
+    }
+
+    // Confirmation dialog for clearing all history (PRO)
+    if (showClearAllDialog) {
+        AlertDialog(
+            onDismissRequest = { showClearAllDialog = false },
+            containerColor = CyberSurface,
+            titleContentColor = MaterialTheme.colorScheme.onSurface,
+            textContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+            title = {
+                Text(
+                    text = Localization.clearAllConfirmTitle(lang),
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 17.sp
+                )
+            },
+            text = {
+                Text(
+                    text = Localization.clearAllConfirmMessage(lang),
+                    fontSize = 14.sp
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        onClearAllSessions()
+                        showClearAllDialog = false
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                    modifier = Modifier.testTag("confirm_clear_all_button")
+                ) {
+                    Text(text = Localization.clearAllHistory(lang), fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { showClearAllDialog = false },
+                    modifier = Modifier.testTag("cancel_clear_all_button")
+                ) {
+                    Text(
+                        text = if (lang == com.example.ui.AppLanguage.RU) "Отмена" else "Cancel",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        )
     }
 
     LazyColumn(
@@ -102,7 +210,7 @@ fun HistoryScreen(
                     )
                 }
                 Spacer(modifier = Modifier.width(8.dp))
-                Column {
+                Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = Localization.historyTitle(lang),
                         fontSize = 20.sp,
@@ -114,6 +222,106 @@ fun HistoryScreen(
                         fontSize = 12.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+                }
+
+                if (uiState.isProUser && uiState.allSessions.isNotEmpty()) {
+                    OutlinedButton(
+                        onClick = { showClearAllDialog = true },
+                        shape = RoundedCornerShape(10.dp),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.5f)),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            contentColor = MaterialTheme.colorScheme.error
+                        ),
+                        modifier = Modifier.testTag("clear_all_history_button")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.DeleteSweep,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = Localization.clearAllHistory(lang),
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            }
+        }
+
+        // FREE TIER / PRO INFO BANNER
+        item {
+            if (!uiState.isProUser) {
+                CyberCard(
+                    borderColor = CyberSurfaceBorder,
+                    backgroundColor = CyberSurfaceVariant
+                ) {
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.Info,
+                                contentDescription = null,
+                                tint = CyberPrimary,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = if (lang == com.example.ui.AppLanguage.RU) "Временная история (Бесплатная версия)" else "Temporary History (Free)",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = CyberPrimary
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = Localization.freeHistoryNotice(lang),
+                            fontSize = 12.sp,
+                            lineHeight = 16.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Button(
+                            onClick = onOpenPaywall,
+                            colors = ButtonDefaults.buttonColors(containerColor = CyberPrimary, contentColor = Color.Black),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.testTag("upgrade_pro_history_banner_button")
+                        ) {
+                            Icon(imageVector = Icons.Default.Lock, contentDescription = null, modifier = Modifier.size(14.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = if (lang == com.example.ui.AppLanguage.RU) "Перейти на PRO (вечная история)" else "Get PRO (permanent history)",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
+            } else {
+                Surface(
+                    color = CyberPrimaryContainer.copy(alpha = 0.5f),
+                    shape = RoundedCornerShape(10.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, CyberPrimary.copy(alpha = 0.4f)),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.History,
+                            contentDescription = null,
+                            tint = CyberPrimary,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = Localization.proManageHistoryBadge(lang),
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = CyberPrimary
+                        )
+                    }
                 }
             }
         }
@@ -217,8 +425,10 @@ fun HistoryScreen(
             items(filteredSessions) { session ->
                 DiagnosisSessionCard(
                     session = session,
+                    isProUser = uiState.isProUser,
                     appLanguage = lang,
-                    onClick = { onViewSession(session) }
+                    onClick = { onViewSession(session) },
+                    onDelete = if (uiState.isProUser) { { sessionToDelete = session } } else null
                 )
             }
         }

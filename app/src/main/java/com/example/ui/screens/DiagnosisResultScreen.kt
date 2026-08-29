@@ -2,7 +2,6 @@ package com.example.ui.screens
 
 import android.content.Intent
 import android.net.Uri
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -27,16 +26,16 @@ import androidx.compose.material.icons.filled.AttachMoney
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.DirectionsCar
-import androidx.compose.material.icons.filled.ExpandLess
-import androidx.compose.material.icons.filled.ExpandMore
-import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.filled.PlayCircle
 import androidx.compose.material.icons.filled.ReportProblem
 import androidx.compose.material.icons.filled.Share
-import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
@@ -44,6 +43,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -89,10 +89,15 @@ private data class SeverityTheme(
 @Composable
 fun DiagnosisResultScreen(
     session: DiagnosisSessionEntity?,
+    isProUser: Boolean = false,
     appLanguage: AppLanguage = AppLanguage.RU,
-    onNavigate: (NavScreen) -> Unit
+    onNavigate: (NavScreen) -> Unit,
+    onOpenPaywall: () -> Unit = { onNavigate(NavScreen.PAYWALL) },
+    onDeleteSession: ((Long) -> Unit)? = null
 ) {
     val context = LocalContext.current
+    var showDeleteConfirmDialog by remember { mutableStateOf(false) }
+
     if (session == null) {
         Box(
             modifier = Modifier
@@ -106,6 +111,51 @@ fun DiagnosisResultScreen(
             )
         }
         return
+    }
+
+    if (showDeleteConfirmDialog && isProUser && onDeleteSession != null) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirmDialog = false },
+            containerColor = CyberSurface,
+            titleContentColor = MaterialTheme.colorScheme.onSurface,
+            textContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+            title = {
+                Text(
+                    text = Localization.deleteReportConfirmTitle(appLanguage),
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 17.sp
+                )
+            },
+            text = {
+                Text(
+                    text = Localization.deleteReportConfirmMessage(appLanguage),
+                    fontSize = 14.sp
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showDeleteConfirmDialog = false
+                        onDeleteSession(session.id)
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                    modifier = Modifier.testTag("result_confirm_delete_button")
+                ) {
+                    Text(text = Localization.deleteReport(appLanguage), fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { showDeleteConfirmDialog = false },
+                    modifier = Modifier.testTag("result_cancel_delete_button")
+                ) {
+                    Text(
+                        text = if (appLanguage == AppLanguage.RU) "Отмена" else "Cancel",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        )
     }
 
     val sevTheme = when (session.severity.uppercase()) {
@@ -183,17 +233,113 @@ fun DiagnosisResultScreen(
                         )
                     }
                     Spacer(modifier = Modifier.width(6.dp))
+
+                    if (isProUser && onDeleteSession != null) {
+                        IconButton(
+                            onClick = { showDeleteConfirmDialog = true },
+                            modifier = Modifier.testTag("result_delete_session_button")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.DeleteOutline,
+                                contentDescription = "Delete",
+                                tint = MaterialTheme.colorScheme.error
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(4.dp))
+                    }
+
                     Surface(
-                        color = CyberPrimaryContainer,
-                        shape = RoundedCornerShape(12.dp)
+                        color = if (isProUser) CyberPrimaryContainer else CyberSurfaceVariant,
+                        shape = RoundedCornerShape(12.dp),
+                        border = androidx.compose.foundation.BorderStroke(
+                            1.dp,
+                            if (isProUser) CyberPrimary else CyberSurfaceBorder
+                        )
                     ) {
                         Text(
-                            text = "AI 98%",
+                            text = if (isProUser) "PRO 100%" else "FREE",
                             fontSize = 11.sp,
                             fontWeight = FontWeight.ExtraBold,
-                            color = CyberPrimary,
+                            color = if (isProUser) CyberPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                         )
+                    }
+                }
+            }
+
+            // FREE TIER UPGRADE PROMO BANNER (IF FREE)
+            if (!isProUser) {
+                item {
+                    Surface(
+                        color = CyberPrimaryContainer.copy(alpha = 0.5f),
+                        shape = RoundedCornerShape(14.dp),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, CyberPrimary.copy(alpha = 0.6f)),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onOpenPaywall() }
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(14.dp)
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(36.dp)
+                                        .clip(CircleShape)
+                                        .background(CyberPrimary.copy(alpha = 0.2f)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Lock,
+                                        contentDescription = null,
+                                        tint = CyberPrimary,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = Localization.freeReportBadge(appLanguage),
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        color = CyberPrimary
+                                    )
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Text(
+                                        text = Localization.freeReportNotice(appLanguage),
+                                        fontSize = 11.sp,
+                                        lineHeight = 16.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(12.dp))
+
+                            Button(
+                                onClick = onOpenPaywall,
+                                colors = ButtonDefaults.buttonColors(containerColor = CyberPrimary, contentColor = Color.Black),
+                                shape = RoundedCornerShape(10.dp),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(44.dp)
+                                    .testTag("result_top_unlock_pro_button")
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Lock,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(15.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = Localization.unlockProCta(appLanguage),
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -292,7 +438,7 @@ fun DiagnosisResultScreen(
                 }
             }
 
-            // 2. PLAIN LANGUAGE AI EXPLANATION CARD
+            // 2. PLAIN LANGUAGE AI EXPLANATION CARD (PRO = FULL, FREE = MINIMAL SHORT TEASER + LOCKED BANNER)
             item {
                 CyberCard(
                     borderColor = CyberPrimary.copy(alpha = 0.3f),
@@ -320,9 +466,9 @@ fun DiagnosisResultScreen(
                                 )
                             }
                             Text(
-                                text = "Gemini AI",
+                                text = if (isProUser) "Gemini AI PRO" else "Базовая сводка",
                                 fontSize = 11.sp,
-                                color = CyberPrimary,
+                                color = if (isProUser) CyberPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
                                 fontWeight = FontWeight.Bold
                             )
                         }
@@ -345,20 +491,87 @@ fun DiagnosisResultScreen(
 
                         Spacer(modifier = Modifier.height(12.dp))
 
-                        Text(
-                            text = Localization.translatePlainExplanation(appLanguage, session.plainExplanation),
-                            fontSize = 14.sp,
-                            lineHeight = 22.sp,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
+                        if (isProUser) {
+                            // FULL EXTENSIVE AI DESCRIPTION (PRO MODE)
+                            Text(
+                                text = Localization.translatePlainExplanation(appLanguage, session.plainExplanation),
+                                fontSize = 14.sp,
+                                lineHeight = 22.sp,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                        } else {
+                            // MINIMAL SHORT SUMMARY FOR FREE TIER + PRO LOCK CTA
+                            val fullExplanation = Localization.translatePlainExplanation(appLanguage, session.plainExplanation)
+                            // Truncate to first sentence only or max 80 chars
+                            val shortSnippet = fullExplanation.split(Regex("[.!?]\\s+")).firstOrNull()?.plus(".") ?: fullExplanation.take(80)
+
+                            Text(
+                                text = shortSnippet,
+                                fontSize = 13.sp,
+                                lineHeight = 19.sp,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f)
+                            )
+
+                            Spacer(modifier = Modifier.height(12.dp))
+
+                            // Locked deeper analysis box
+                            Surface(
+                                color = CyberSurfaceVariant.copy(alpha = 0.7f),
+                                shape = RoundedCornerShape(12.dp),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, CyberSurfaceBorder),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { onOpenPaywall() }
+                            ) {
+                                Column(
+                                    modifier = Modifier.padding(14.dp)
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Lock,
+                                            contentDescription = "Locked",
+                                            tint = CyberPrimary,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text(
+                                            text = Localization.proLockedDetailNote(appLanguage),
+                                            fontSize = 12.sp,
+                                            lineHeight = 16.sp,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            modifier = Modifier.weight(1f)
+                                        )
+                                    }
+
+                                    Spacer(modifier = Modifier.height(10.dp))
+
+                                    Button(
+                                        onClick = onOpenPaywall,
+                                        colors = ButtonDefaults.buttonColors(containerColor = CyberPrimary, contentColor = Color.Black),
+                                        shape = RoundedCornerShape(8.dp),
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Icon(imageVector = Icons.Default.Lock, contentDescription = null, modifier = Modifier.size(14.dp))
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text(
+                                            text = Localization.unlockProCta(appLanguage),
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }
 
-            // 3. ESTIMATED REPAIR COST CARD
+            // 3. ESTIMATED REPAIR COST CARD (PRO = FULL CALCULATION, FREE = LOCKED)
             item {
                 CyberCard(
-                    borderColor = CyberPrimary.copy(alpha = 0.4f),
+                    borderColor = if (isProUser) CyberPrimary.copy(alpha = 0.4f) else CyberSurfaceBorder,
                     backgroundColor = CyberSurface
                 ) {
                     Column {
@@ -372,7 +585,7 @@ fun DiagnosisResultScreen(
                                 Icon(
                                     imageVector = Icons.Default.AttachMoney,
                                     contentDescription = null,
-                                    tint = CyberPrimary,
+                                    tint = if (isProUser) CyberPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
                                     modifier = Modifier.size(22.dp)
                                 )
                                 Spacer(modifier = Modifier.width(8.dp))
@@ -385,13 +598,13 @@ fun DiagnosisResultScreen(
                             }
 
                             Surface(
-                                color = CyberSurfaceVariant,
+                                color = if (isProUser) CyberPrimaryContainer else CyberSurfaceVariant,
                                 shape = RoundedCornerShape(8.dp)
                             ) {
                                 Text(
-                                    text = if (appLanguage == AppLanguage.RU) "Оценка ИИ" else "AI Estimate",
+                                    text = if (isProUser) "PRO Оценка" else "PRO Только",
                                     fontSize = 11.sp,
-                                    color = CyberPrimary,
+                                    color = if (isProUser) CyberPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
                                     fontWeight = FontWeight.SemiBold,
                                     modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
                                 )
@@ -400,56 +613,102 @@ fun DiagnosisResultScreen(
 
                         Spacer(modifier = Modifier.height(12.dp))
 
-                        // Estimated Repair Cost Value block directly underneath the title
-                        Surface(
-                            color = CyberPrimaryContainer,
-                            shape = RoundedCornerShape(12.dp),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, CyberPrimary.copy(alpha = 0.35f)),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Row(
+                        if (isProUser) {
+                            // PRO: Full Cost Value Calculation
+                            Surface(
+                                color = CyberPrimaryContainer,
+                                shape = RoundedCornerShape(12.dp),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, CyberPrimary.copy(alpha = 0.35f)),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Text(
+                                        text = Localization.translateCostRange(appLanguage, session.estimatedCostRange),
+                                        fontSize = 18.sp,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        color = CyberPrimary
+                                    )
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(10.dp))
+
+                            Text(
+                                text = Localization.repairCostIncludeNotice(appLanguage),
+                                fontSize = 12.sp,
+                                lineHeight = 17.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        } else {
+                            // FREE: Locked Cost Breakdown
+                            Surface(
+                                color = CyberSurfaceVariant.copy(alpha = 0.7f),
+                                shape = RoundedCornerShape(12.dp),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, CyberSurfaceBorder),
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(horizontal = 16.dp, vertical = 12.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween
+                                    .clickable { onOpenPaywall() }
                             ) {
-                                Text(
-                                    text = Localization.translateCostRange(appLanguage, session.estimatedCostRange),
-                                    fontSize = 18.sp,
-                                    fontWeight = FontWeight.ExtraBold,
-                                    color = CyberPrimary
-                                )
+                                Column(modifier = Modifier.padding(14.dp)) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(
+                                            imageVector = Icons.Default.Lock,
+                                            contentDescription = "Locked",
+                                            tint = CyberPrimary,
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text(
+                                            text = "•••••• - •••••• (${Localization.costProOnly(appLanguage)})",
+                                            fontSize = 15.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.height(6.dp))
+                                    Text(
+                                        text = Localization.proLockedCostNote(appLanguage),
+                                        fontSize = 11.sp,
+                                        lineHeight = 15.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    Spacer(modifier = Modifier.height(10.dp))
+                                    Button(
+                                        onClick = onOpenPaywall,
+                                        colors = ButtonDefaults.buttonColors(containerColor = CyberPrimary, contentColor = Color.Black),
+                                        shape = RoundedCornerShape(8.dp),
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Icon(imageVector = Icons.Default.Lock, contentDescription = null, modifier = Modifier.size(14.dp))
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text(
+                                            text = Localization.unlockProCta(appLanguage),
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+                                }
                             }
                         }
-
-                        Spacer(modifier = Modifier.height(10.dp))
-
-                        Text(
-                            text = Localization.repairCostIncludeNotice(appLanguage),
-                            fontSize = 12.sp,
-                            lineHeight = 17.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
                     }
                 }
             }
 
-            // 4. DIY GUIDE CARD
+            // 4. DIY GUIDE CARD & YOUTUBE VIDEO (PRO = FULL STEPS & VIDEO BUTTON, FREE = LOCKED)
             item {
-                var isDiyExpanded by remember { mutableStateOf(true) }
-                val translatedDiy = Localization.translateDiyInstructions(appLanguage, session.diyInstructions)
-                val diySteps = translatedDiy.split("||").filter { it.isNotBlank() }
-
                 CyberCard(
-                    borderColor = if (session.isDiy) CyberSecondary else CyberSurfaceBorder,
+                    borderColor = if (isProUser && session.isDiy) CyberSecondary else CyberSurfaceBorder,
                     backgroundColor = CyberSurface
                 ) {
                     Column {
                         Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { isDiyExpanded = !isDiyExpanded },
+                            modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
@@ -457,7 +716,7 @@ fun DiagnosisResultScreen(
                                 Icon(
                                     imageVector = Icons.Default.Build,
                                     contentDescription = null,
-                                    tint = if (session.isDiy) CyberSecondary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    tint = if (isProUser && session.isDiy) CyberSecondary else MaterialTheme.colorScheme.onSurfaceVariant,
                                     modifier = Modifier.size(20.dp)
                                 )
                                 Spacer(modifier = Modifier.width(8.dp))
@@ -468,16 +727,24 @@ fun DiagnosisResultScreen(
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
                             }
-
-                            Icon(
-                                imageVector = if (isDiyExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
-                                contentDescription = "Expand",
-                                tint = CyberPrimary
-                            )
+                            if (!isProUser) {
+                                Icon(
+                                    imageVector = Icons.Default.Lock,
+                                    contentDescription = "Locked",
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
                         }
 
-                        AnimatedVisibility(visible = isDiyExpanded) {
-                            Column(modifier = Modifier.padding(top = 12.dp)) {
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        if (isProUser) {
+                            // PRO: Full DIY steps and YouTube Launcher
+                            val translatedDiy = Localization.translateDiyInstructions(appLanguage, session.diyInstructions)
+                            val diySteps = translatedDiy.split("||").filter { it.isNotBlank() }
+
+                            Column {
                                 diySteps.forEachIndexed { index, step ->
                                     Row(
                                         modifier = Modifier
@@ -536,12 +803,62 @@ fun DiagnosisResultScreen(
                                     )
                                 }
                             }
+                        } else {
+                            // FREE: Locked DIY Guide and Locked YouTube Video
+                            Surface(
+                                color = CyberSurfaceVariant.copy(alpha = 0.7f),
+                                shape = RoundedCornerShape(12.dp),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, CyberSurfaceBorder),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { onOpenPaywall() }
+                            ) {
+                                Column(modifier = Modifier.padding(14.dp)) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(
+                                            imageVector = Icons.Default.Lock,
+                                            contentDescription = "Locked",
+                                            tint = CyberSecondary,
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text(
+                                            text = Localization.searchDiyVideos(appLanguage),
+                                            fontSize = 14.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.onSurface
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.height(6.dp))
+                                    Text(
+                                        text = Localization.proLockedDiyNote(appLanguage),
+                                        fontSize = 11.sp,
+                                        lineHeight = 15.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    Spacer(modifier = Modifier.height(10.dp))
+                                    Button(
+                                        onClick = onOpenPaywall,
+                                        colors = ButtonDefaults.buttonColors(containerColor = CyberSecondary, contentColor = Color.Black),
+                                        shape = RoundedCornerShape(8.dp),
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Icon(imageVector = Icons.Default.Lock, contentDescription = null, modifier = Modifier.size(14.dp))
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text(
+                                            text = Localization.unlockProCta(appLanguage),
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+                                }
+                            }
                         }
                     }
                 }
             }
 
-            // ACTION BUTTONS
+            // ACTION BUTTONS (SHARE + FIND STO MECHANICS)
             item {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -552,10 +869,12 @@ fun DiagnosisResultScreen(
                             val shareIntent = Intent(Intent.ACTION_SEND).apply {
                                 type = "text/plain"
                                 putExtra(Intent.EXTRA_SUBJECT, "Car Diagnostic Report: ${session.technicalSummary}")
-                                putExtra(
-                                    Intent.EXTRA_TEXT,
-                                    "CarDiagnostic AI Report:\n\nIssue: ${session.technicalSummary}\nSeverity: ${session.severityTitle}\nExplanation: ${session.plainExplanation}\nEst. Cost: ${session.estimatedCostRange}"
-                                )
+                                val shareBody = if (isProUser) {
+                                    "CarDiagnostic AI Report (PRO):\n\nIssue: ${session.technicalSummary}\nSeverity: ${session.severityTitle}\nExplanation: ${session.plainExplanation}\nEst. Cost: ${session.estimatedCostRange}"
+                                } else {
+                                    "CarDiagnostic AI Report:\n\nIssue: ${session.technicalSummary}\nSeverity: ${session.severityTitle}\nStatus: ${Localization.translateRecommendedAction(appLanguage, session.recommendedAction)}"
+                                }
+                                putExtra(Intent.EXTRA_TEXT, shareBody)
                             }
                             context.startActivity(Intent.createChooser(shareIntent, "Share Report"))
                         },
@@ -571,21 +890,44 @@ fun DiagnosisResultScreen(
                         Text(text = Localization.shareReport(appLanguage), fontSize = 12.sp, fontWeight = FontWeight.Bold)
                     }
 
-                    Button(
-                        onClick = {
-                            val mapUri = Uri.parse("geo:0,0?q=auto+repair+mechanic+near+me")
-                            val mapIntent = Intent(Intent.ACTION_VIEW, mapUri)
-                            context.startActivity(mapIntent)
-                        },
-                        colors = ButtonDefaults.buttonColors(containerColor = CyberPrimary, contentColor = Color.Black),
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier
-                            .weight(1f)
-                            .testTag("find_mechanics_button")
-                    ) {
-                        Icon(imageVector = Icons.Default.Map, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(text = Localization.findMechanics(appLanguage), fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    if (isProUser) {
+                        // PRO: Direct Launch of Maps for STO mechanics
+                        Button(
+                            onClick = {
+                                val mapUri = Uri.parse("geo:0,0?q=auto+repair+mechanic+near+me")
+                                val mapIntent = Intent(Intent.ACTION_VIEW, mapUri)
+                                context.startActivity(mapIntent)
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = CyberPrimary, contentColor = Color.Black),
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier
+                                .weight(1f)
+                                .testTag("find_mechanics_button")
+                        ) {
+                            Icon(imageVector = Icons.Default.Map, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(text = Localization.findMechanics(appLanguage), fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        }
+                    } else {
+                        // FREE: Locked STO Button that opens Paywall
+                        Button(
+                            onClick = onOpenPaywall,
+                            colors = ButtonDefaults.buttonColors(containerColor = CyberSurfaceVariant, contentColor = MaterialTheme.colorScheme.onSurfaceVariant),
+                            shape = RoundedCornerShape(12.dp),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, CyberSurfaceBorder),
+                            modifier = Modifier
+                                .weight(1f)
+                                .testTag("find_mechanics_locked_button")
+                        ) {
+                            Icon(imageVector = Icons.Default.Lock, contentDescription = null, tint = CyberPrimary, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = Localization.findMechanicsProLocked(appLanguage),
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = CyberPrimary
+                            )
+                        }
                     }
                 }
             }
@@ -596,4 +938,3 @@ fun DiagnosisResultScreen(
         }
     }
 }
-

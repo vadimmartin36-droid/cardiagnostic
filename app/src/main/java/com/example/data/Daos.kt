@@ -54,6 +54,9 @@ interface DiagnosisSessionDao {
     @Query("SELECT COUNT(*) FROM diagnosis_sessions WHERE timestamp >= :startOfMonthTimestamp")
     suspend fun getMonthlyUsageCount(startOfMonthTimestamp: Long): Int
 
+    @Query("SELECT COUNT(*) FROM diagnosis_sessions WHERE timestamp >= :sinceTimestamp")
+    suspend fun getUsageCountSince(sinceTimestamp: Long): Int
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertSession(session: DiagnosisSessionEntity): Long
 

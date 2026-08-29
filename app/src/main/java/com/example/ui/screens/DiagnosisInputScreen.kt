@@ -44,6 +44,7 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material.icons.filled.GraphicEq
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.RadioButtonChecked
@@ -64,6 +65,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import com.example.ui.theme.CyberDialogSurface
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -113,6 +115,12 @@ fun DiagnosisInputScreen(
     val lang = uiState.appLanguage
     val context = LocalContext.current
     val scrollState = rememberScrollState()
+
+    LaunchedEffect(uiState.isProUser) {
+        if (!uiState.isProUser && uiState.inputType != "TEXT") {
+            onSetInputType("TEXT")
+        }
+    }
 
     var showCarSelectDialog by remember { mutableStateOf(false) }
     var showAddCarDialog by remember { mutableStateOf(false) }
@@ -376,16 +384,42 @@ fun DiagnosisInputScreen(
                 label = Localization.tabDashboard(lang),
                 icon = Icons.Default.CameraAlt,
                 isSelected = uiState.inputType == "PHOTO",
+                isProOnly = !uiState.isProUser,
                 tag = "tab_photo",
-                onClick = { onSetInputType("PHOTO") },
+                onClick = {
+                    if (!uiState.isProUser) {
+                        val msg = when (lang) {
+                            com.example.ui.AppLanguage.RU -> "Сканирование по фото доступно только в PRO версии!"
+                            com.example.ui.AppLanguage.PL -> "Skanowanie ze zdjęcia jest dostępne tylko w wersji PRO!"
+                            com.example.ui.AppLanguage.EN -> "Photo scanning is available only in PRO version!"
+                            com.example.ui.AppLanguage.UA -> "Сканування за фото доступне тільки в PRO версії!"
+                        }
+                        Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                    } else {
+                        onSetInputType("PHOTO")
+                    }
+                },
                 modifier = Modifier.weight(1f)
             )
             InputTypeTab(
                 label = Localization.tabVoice(lang),
                 icon = Icons.Default.Mic,
                 isSelected = uiState.inputType == "VOICE",
+                isProOnly = !uiState.isProUser,
                 tag = "tab_voice",
-                onClick = { onSetInputType("VOICE") },
+                onClick = {
+                    if (!uiState.isProUser) {
+                        val msg = when (lang) {
+                            com.example.ui.AppLanguage.RU -> "Голосовая диагностика доступна только в PRO версии!"
+                            com.example.ui.AppLanguage.PL -> "Diagnostyka głosowa jest dostępna tylko w wersji PRO!"
+                            com.example.ui.AppLanguage.EN -> "Voice diagnosis is available only in PRO version!"
+                            com.example.ui.AppLanguage.UA -> "Голосова діагностика доступна тільки в PRO версії!"
+                        }
+                        Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                    } else {
+                        onSetInputType("VOICE")
+                    }
+                },
                 modifier = Modifier.weight(1f)
             )
             InputTypeTab(
@@ -779,8 +813,16 @@ fun DiagnosisInputScreen(
                     Spacer(modifier = Modifier.height(6.dp))
                     Button(
                         onClick = {
-                            showCarSelectDialog = false
-                            showAddCarDialog = true
+                            if (!uiState.isProUser && uiState.allCars.size >= 1) {
+                                val msg = if (lang == com.example.ui.AppLanguage.RU)
+                                    "В бесплатном режиме можно добавить только 1 авто. Активируйте PRO для добавления нескольких авто!"
+                                else
+                                    "In free mode you can add only 1 vehicle. Activate PRO to add multiple vehicles!"
+                                Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
+                            } else {
+                                showCarSelectDialog = false
+                                showAddCarDialog = true
+                            }
                         },
                         colors = ButtonDefaults.buttonColors(containerColor = CyberPrimary, contentColor = Color.Black),
                         shape = RoundedCornerShape(10.dp),
@@ -920,6 +962,7 @@ private fun InputTypeTab(
     label: String,
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     isSelected: Boolean,
+    isProOnly: Boolean = false,
     tag: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier
@@ -927,7 +970,7 @@ private fun InputTypeTab(
     Surface(
         color = if (isSelected) CyberPrimaryContainer else CyberSurface,
         shape = RoundedCornerShape(12.dp),
-        border = androidx.compose.foundation.BorderStroke(1.dp, if (isSelected) CyberPrimary else CyberSurfaceBorder),
+        border = androidx.compose.foundation.BorderStroke(1.dp, if (isSelected) CyberPrimary else if (isProOnly) Color(0xFFF59E0B).copy(alpha = 0.3f) else CyberSurfaceBorder),
         modifier = modifier
             .testTag(tag)
             .clickable { onClick() }
@@ -937,18 +980,28 @@ private fun InputTypeTab(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.padding(vertical = 10.dp, horizontal = 4.dp)
         ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                tint = if (isSelected) CyberPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(16.dp)
-            )
-            Spacer(modifier = Modifier.width(4.dp))
+            if (isProOnly) {
+                Icon(
+                    imageVector = Icons.Default.Lock,
+                    contentDescription = "PRO Only",
+                    tint = Color(0xFFF59E0B),
+                    modifier = Modifier.size(13.dp)
+                )
+                Spacer(modifier = Modifier.width(3.dp))
+            } else {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = if (isSelected) CyberPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(16.dp)
+                )
+                Spacer(modifier = Modifier.width(4.dp))
+            }
             Text(
                 text = label,
                 fontSize = 11.sp,
                 fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                color = if (isSelected) CyberPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                color = if (isSelected) CyberPrimary else if (isProOnly) MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
@@ -962,19 +1015,33 @@ private fun startSpeechRecognitionIntent(
     speechLauncher: androidx.activity.result.ActivityResultLauncher<Intent>,
     onCancelVoice: () -> Unit
 ) {
+    val languageCode = when (lang) {
+        com.example.ui.AppLanguage.RU -> "ru-RU"
+        com.example.ui.AppLanguage.PL -> "pl-PL"
+        com.example.ui.AppLanguage.EN -> "en-US"
+        com.example.ui.AppLanguage.UA -> "uk-UA"
+    }
+    val promptText = when (lang) {
+        com.example.ui.AppLanguage.RU -> "Опишите проблему или звук голосом..."
+        com.example.ui.AppLanguage.PL -> "Opisz problem lub dźwięk głosem..."
+        com.example.ui.AppLanguage.EN -> "Describe problem or noise with your voice..."
+        com.example.ui.AppLanguage.UA -> "Опишіть проблему або звук голосом..."
+    }
     val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
         putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-        putExtra(RecognizerIntent.EXTRA_LANGUAGE, if (lang == com.example.ui.AppLanguage.RU) "ru-RU" else "en-US")
-        putExtra(RecognizerIntent.EXTRA_PROMPT, if (lang == com.example.ui.AppLanguage.RU) "Опишите проблему или звук голосом..." else "Describe problem or noise with your voice...")
+        putExtra(RecognizerIntent.EXTRA_LANGUAGE, languageCode)
+        putExtra(RecognizerIntent.EXTRA_PROMPT, promptText)
     }
     try {
         speechLauncher.launch(intent)
     } catch (e: Exception) {
-        Toast.makeText(
-            context,
-            if (lang == com.example.ui.AppLanguage.RU) "Распознавание речи недоступно. Вы можете использовать симуляцию или ввести текст." else "Speech recognition unavailable. Use simulation button or type text.",
-            Toast.LENGTH_LONG
-        ).show()
+        val errorMsg = when (lang) {
+            com.example.ui.AppLanguage.RU -> "Распознавание речи недоступно. Вы можете использовать симуляцию или ввести текст."
+            com.example.ui.AppLanguage.PL -> "Rozpoznawanie mowy jest niedostępne. Możesz użyć symulacji lub wpisać tekst."
+            com.example.ui.AppLanguage.EN -> "Speech recognition unavailable. Use simulation button or type text."
+            com.example.ui.AppLanguage.UA -> "Розпізнавання мови недоступне. Ви можете використати симуляцію або ввести текст."
+        }
+        Toast.makeText(context, errorMsg, Toast.LENGTH_LONG).show()
         onCancelVoice()
     }
 }

@@ -76,8 +76,8 @@ fun SplashScreen(
     onSplashFinished: () -> Unit
 ) {
     val progressAnim = remember { Animatable(0f) }
-    val scaleAnim = remember { Animatable(0.85f) }
-    val alphaAnim = remember { Animatable(0f) }
+    val scaleAnim = remember { Animatable(1.0f) }
+    val alphaAnim = remember { Animatable(1.0f) }
 
     val infiniteTransition = rememberInfiniteTransition(label = "splash_hud")
     val rotation by infiniteTransition.animateFloat(
@@ -100,26 +100,11 @@ fun SplashScreen(
     )
 
     LaunchedEffect(Unit) {
-        // Entrance animation
-        scaleAnim.animateTo(
-            targetValue = 1.0f,
-            animationSpec = tween(700, easing = LinearEasing)
-        )
-    }
-
-    LaunchedEffect(Unit) {
-        alphaAnim.animateTo(
-            targetValue = 1.0f,
-            animationSpec = tween(600)
-        )
-    }
-
-    LaunchedEffect(Unit) {
         progressAnim.animateTo(
             targetValue = 1.0f,
-            animationSpec = tween(2200, easing = LinearEasing)
+            animationSpec = tween(1200, easing = LinearEasing)
         )
-        delay(200)
+        delay(100)
         onSplashFinished()
     }
 
@@ -240,7 +225,7 @@ fun SplashScreen(
                         modifier = Modifier.fillMaxSize()
                     ) {
                         AsyncImage(
-                            model = R.drawable.img_splash_logo_1786069724298,
+                            model = R.drawable.img_app_logo_v3_1787825693943,
                             contentDescription = "CarDiagnostic AI Logo",
                             contentScale = ContentScale.Crop,
                             modifier = Modifier

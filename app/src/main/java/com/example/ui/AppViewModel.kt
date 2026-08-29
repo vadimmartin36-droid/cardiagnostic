@@ -42,7 +42,9 @@ data class AppUiState(
     val allSessions: List<DiagnosisSessionEntity> = emptyList(),
     val upcomingTasks: List<MaintenanceTaskEntity> = emptyList(),
     val monthlyUsageCount: Int = 0,
+    val resetRemainingMs: Long = 0L,
     val isProUser: Boolean = false,
+    val proExpirationTimestamp: Long = 0L,
     val activeDiagnosisSession: DiagnosisSessionEntity? = null,
     val isAnalyzing: Boolean = false,
     val analysisError: String? = null,
@@ -93,7 +95,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 val lang = flows[5] as AppLanguage
 
                 val isPro = repository.isProUser.value
-                val count = repository.getMonthlyUsageCount()
+                val proExp = repository.proExpirationTimestamp.value
+                val usageInfo = repository.getWeeklyUsageInfo()
                 _uiState.value.copy(
                     appLanguage = lang,
                     primaryCar = primaryCar,
@@ -101,8 +104,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     recentSessions = recent,
                     allSessions = all,
                     upcomingTasks = tasks,
-                    monthlyUsageCount = count,
-                    isProUser = isPro
+                    monthlyUsageCount = usageInfo.usageCount,
+                    resetRemainingMs = usageInfo.resetRemainingMs,
+                    isProUser = isPro,
+                    proExpirationTimestamp = proExp
                 )
             }.collect { updatedState ->
                 _uiState.value = updatedState
@@ -235,6 +240,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             repository.setProUser(newProStatus)
             _uiState.value = _uiState.value.copy(
                 isProUser = newProStatus,
+                proExpirationTimestamp = repository.proExpirationTimestamp.value,
                 showPaywall = false
             )
         }
@@ -245,6 +251,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun createNewCarProfile(make: String, model: String, year: Int, mileage: Int, engineType: String) {
+        val currentState = _uiState.value
+        if (!currentState.isProUser && currentState.allCars.size >= 1) {
+            return
+        }
         viewModelScope.launch {
             repository.createCarProfile(make, model, year, mileage, engineType)
         }
@@ -257,12 +267,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun toggleTaskCompleted(task: MaintenanceTaskEntity) {
+        if (!_uiState.value.isProUser) return
         viewModelScope.launch {
             repository.toggleTaskCompleted(task)
         }
     }
 
     fun addMaintenanceTask(title: String, dueMileage: Int) {
+        if (!_uiState.value.isProUser) return
         viewModelScope.launch {
             val primaryId = _uiState.value.primaryCar?.id
             repository.addMaintenanceTask(primaryId, title, dueMileage)
@@ -290,6 +302,30 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     fun toggleLanguage() {
         viewModelScope.launch {
             repository.toggleLanguage()
+        }
+    }
+
+    fun deleteDiagnosisSession(sessionId: Long) {
+        if (!_uiState.value.isProUser) return
+        viewModelScope.launch {
+            repository.deleteSession(sessionId)
+            if (_uiState.value.activeDiagnosisSession?.id == sessionId) {
+                _uiState.value = _uiState.value.copy(
+                    activeDiagnosisSession = null,
+                    currentScreen = if (_uiState.value.currentScreen == NavScreen.DIAGNOSIS_RESULT) NavScreen.HISTORY else _uiState.value.currentScreen
+                )
+            }
+        }
+    }
+
+    fun deleteAllDiagnosisSessions() {
+        if (!_uiState.value.isProUser) return
+        viewModelScope.launch {
+            repository.deleteAllSessions()
+            _uiState.value = _uiState.value.copy(
+                activeDiagnosisSession = null,
+                currentScreen = if (_uiState.value.currentScreen == NavScreen.DIAGNOSIS_RESULT) NavScreen.HISTORY else _uiState.value.currentScreen
+            )
         }
     }
 }

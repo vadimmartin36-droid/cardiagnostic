@@ -12,7 +12,14 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import java.util.Calendar
 
-class PaywallRequiredException(val remainingFreeCount: Int) : Exception("Free diagnostic limit reached (3/month). Upgrade to Pro for unlimited scans.")
+class PaywallRequiredException(val remainingFreeCount: Int) : Exception("Free diagnostic limit reached (3/week). Upgrade to Pro for unlimited scans.")
+
+data class LimitUsageInfo(
+    val usageCount: Int,
+    val maxLimit: Int = 3,
+    val isLimitReached: Boolean,
+    val resetRemainingMs: Long
+)
 
 class CarDiagnosticRepository(
     private val context: Context,
@@ -28,8 +35,16 @@ class CarDiagnosticRepository(
     private val _isProUser = MutableStateFlow(prefs.getBoolean("is_pro_user", false))
     val isProUser: StateFlow<Boolean> = _isProUser.asStateFlow()
 
+    private val _proExpirationTimestamp = MutableStateFlow(prefs.getLong("pro_expiration_timestamp", 0L))
+    val proExpirationTimestamp: StateFlow<Long> = _proExpirationTimestamp.asStateFlow()
+
     private val _appLanguage = MutableStateFlow(
-        if (prefs.getString("app_language", "RU") == "EN") com.example.ui.AppLanguage.EN else com.example.ui.AppLanguage.RU
+        try {
+            val saved = prefs.getString("app_language", "RU")
+            com.example.ui.AppLanguage.valueOf(saved ?: "RU")
+        } catch (e: Exception) {
+            com.example.ui.AppLanguage.RU
+        }
     )
     val appLanguage: StateFlow<com.example.ui.AppLanguage> = _appLanguage.asStateFlow()
 
@@ -40,6 +55,7 @@ class CarDiagnosticRepository(
     val upcomingTasks: Flow<List<MaintenanceTaskEntity>> = taskDao.getAllUpcomingTasks()
 
     init {
+        checkProExpiration()
         kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
             if (!prefs.getBoolean("clean_user_db_v6", false)) {
                 carProfileDao.deleteAllCarProfiles()
@@ -47,31 +63,134 @@ class CarDiagnosticRepository(
                 taskDao.deleteAllTasks()
                 prefs.edit().putBoolean("clean_user_db_v6", true).apply()
             }
+            // Free tier: scan history is ephemeral and automatically clears on app launch
+            val isPro = prefs.getBoolean("is_pro_user", false)
+            if (!isPro) {
+                sessionDao.deleteAllSessions()
+            }
+        }
+    }
+
+    private fun checkProExpiration() {
+        val isPro = prefs.getBoolean("is_pro_user", false)
+        val exp = prefs.getLong("pro_expiration_timestamp", 0L)
+        val now = System.currentTimeMillis()
+        if (isPro && exp > 0L && now > exp) {
+            prefs.edit().putBoolean("is_pro_user", false).putLong("pro_expiration_timestamp", 0L).apply()
+            _isProUser.value = false
+            _proExpirationTimestamp.value = 0L
+        } else if (isPro && exp == 0L) {
+            // Set 1 month default if missing
+            val defaultExp = now + 30L * 24 * 60 * 60 * 1000L
+            prefs.edit().putLong("pro_expiration_timestamp", defaultExp).apply()
+            _proExpirationTimestamp.value = defaultExp
         }
     }
 
     fun getTasksForCar(carId: Long): Flow<List<MaintenanceTaskEntity>> = taskDao.getTasksForCar(carId)
 
     suspend fun setProUser(isPro: Boolean) {
-        prefs.edit().putBoolean("is_pro_user", isPro).apply()
-        _isProUser.value = isPro
+        val ONE_MONTH_MS = 30L * 24 * 60 * 60 * 1000L
+        val now = System.currentTimeMillis()
+        if (isPro) {
+            val exp = now + ONE_MONTH_MS
+            prefs.edit()
+                .putBoolean("is_pro_user", true)
+                .putLong("pro_expiration_timestamp", exp)
+                .apply()
+            _isProUser.value = true
+            _proExpirationTimestamp.value = exp
+        } else {
+            prefs.edit()
+                .putBoolean("is_pro_user", false)
+                .putLong("pro_expiration_timestamp", 0L)
+                .apply()
+            _isProUser.value = false
+            _proExpirationTimestamp.value = 0L
+        }
     }
 
     suspend fun toggleLanguage() {
-        val next = if (_appLanguage.value == com.example.ui.AppLanguage.RU) com.example.ui.AppLanguage.EN else com.example.ui.AppLanguage.RU
+        val next = when (_appLanguage.value) {
+            com.example.ui.AppLanguage.RU -> com.example.ui.AppLanguage.EN
+            com.example.ui.AppLanguage.EN -> com.example.ui.AppLanguage.PL
+            com.example.ui.AppLanguage.PL -> com.example.ui.AppLanguage.UA
+            com.example.ui.AppLanguage.UA -> com.example.ui.AppLanguage.RU
+        }
         prefs.edit().putString("app_language", next.name).apply()
         _appLanguage.value = next
     }
 
+    suspend fun setAppLanguage(lang: com.example.ui.AppLanguage) {
+        prefs.edit().putString("app_language", lang.name).apply()
+        _appLanguage.value = lang
+    }
+
+    suspend fun getWeeklyUsageInfo(): LimitUsageInfo {
+        val ONE_WEEK_MS = 7 * 24 * 60 * 60 * 1000L
+        val now = System.currentTimeMillis()
+
+        var resetTimestamp = prefs.getLong("limit_reset_timestamp", 0L)
+        var exhaustedTimestamp = prefs.getLong("limit_exhausted_timestamp", 0L)
+
+        // Check if 1 week has passed since exhaustion timestamp
+        if (exhaustedTimestamp > 0L) {
+            val timeSinceExhaustion = now - exhaustedTimestamp
+            if (timeSinceExhaustion >= ONE_WEEK_MS) {
+                // Reset limit!
+                resetTimestamp = now
+                exhaustedTimestamp = 0L
+                prefs.edit()
+                    .putLong("limit_reset_timestamp", resetTimestamp)
+                    .putLong("limit_exhausted_timestamp", 0L)
+                    .apply()
+            }
+        }
+
+        val usageCount = sessionDao.getUsageCountSince(resetTimestamp)
+
+        var isReached = usageCount >= 3
+        var resetRemainingMs = 0L
+
+        if (isReached) {
+            if (exhaustedTimestamp == 0L) {
+                exhaustedTimestamp = now
+                prefs.edit().putLong("limit_exhausted_timestamp", exhaustedTimestamp).apply()
+            }
+            val elapsed = now - exhaustedTimestamp
+            resetRemainingMs = (ONE_WEEK_MS - elapsed).coerceAtLeast(0L)
+
+            if (resetRemainingMs == 0L && elapsed >= ONE_WEEK_MS) {
+                resetTimestamp = now
+                exhaustedTimestamp = 0L
+                prefs.edit()
+                    .putLong("limit_reset_timestamp", resetTimestamp)
+                    .putLong("limit_exhausted_timestamp", 0L)
+                    .apply()
+                val newCount = sessionDao.getUsageCountSince(resetTimestamp)
+                return LimitUsageInfo(
+                    usageCount = newCount.coerceAtMost(3),
+                    maxLimit = 3,
+                    isLimitReached = newCount >= 3,
+                    resetRemainingMs = 0L
+                )
+            }
+        } else {
+            if (exhaustedTimestamp != 0L) {
+                prefs.edit().putLong("limit_exhausted_timestamp", 0L).apply()
+            }
+        }
+
+        return LimitUsageInfo(
+            usageCount = usageCount.coerceAtMost(3),
+            maxLimit = 3,
+            isLimitReached = isReached,
+            resetRemainingMs = resetRemainingMs
+        )
+    }
+
     suspend fun getMonthlyUsageCount(): Int {
-        val calendar = Calendar.getInstance()
-        calendar.set(Calendar.DAY_OF_MONTH, 1)
-        calendar.set(Calendar.HOUR_OF_DAY, 0)
-        calendar.set(Calendar.MINUTE, 0)
-        calendar.set(Calendar.SECOND, 0)
-        calendar.set(Calendar.MILLISECOND, 0)
-        val startOfMonth = calendar.timeInMillis
-        return sessionDao.getMonthlyUsageCount(startOfMonth)
+        return getWeeklyUsageInfo().usageCount
     }
 
     suspend fun runDiagnosis(
@@ -81,8 +200,8 @@ class CarDiagnosticRepository(
         inputType: String,
         imageUriString: String? = null
     ): DiagnosisSessionEntity {
-        val currentMonthlyCount = getMonthlyUsageCount()
-        if (!_isProUser.value && currentMonthlyCount >= 3) {
+        val usageInfo = getWeeklyUsageInfo()
+        if (!_isProUser.value && usageInfo.isLimitReached) {
             throw PaywallRequiredException(0)
         }
 
@@ -90,18 +209,28 @@ class CarDiagnosticRepository(
             "${it.year} ${it.make} ${it.model} (${it.currentMileage} km, ${it.engineType})"
         } ?: "General Vehicle (0 km, Gasoline)"
 
-        val isRussian = _appLanguage.value == com.example.ui.AppLanguage.RU
+        val currentLang = _appLanguage.value
         val result = geminiService.analyzeVehicleIssue(
             carInfo = carDescription,
             symptomText = symptomText,
             imageBitmap = imageBitmap,
-            isRussian = isRussian
+            appLanguage = currentLang
         )
 
         val inputSummaryText = symptomText?.ifBlank { null } ?: if (imageBitmap != null) {
-            if (isRussian) "Сканирование фото значка приборной панели" else "Dashboard warning light photo scan"
+            when (currentLang) {
+                com.example.ui.AppLanguage.RU -> "Сканирование фото значка приборной панели"
+                com.example.ui.AppLanguage.PL -> "Skanowanie zdjęcia kontrolki"
+                com.example.ui.AppLanguage.EN -> "Dashboard warning light photo scan"
+                com.example.ui.AppLanguage.UA -> "Сканування фото значка приладової панелі"
+            }
         } else {
-            if (isRussian) "Голосовой отчет о симптомах" else "Voice symptom report"
+            when (currentLang) {
+                com.example.ui.AppLanguage.RU -> "Голосовой отчет о симптомах"
+                com.example.ui.AppLanguage.PL -> "Głosowy raport objawów"
+                com.example.ui.AppLanguage.EN -> "Voice symptom report"
+                com.example.ui.AppLanguage.UA -> "Голосовий звіт про симптоми"
+            }
         }
 
         val session = DiagnosisSessionEntity(
@@ -122,6 +251,10 @@ class CarDiagnosticRepository(
         )
 
         val insertedId = sessionDao.insertSession(session)
+        val postUsage = getWeeklyUsageInfo()
+        if (postUsage.isLimitReached && prefs.getLong("limit_exhausted_timestamp", 0L) == 0L) {
+            prefs.edit().putLong("limit_exhausted_timestamp", System.currentTimeMillis()).apply()
+        }
         return session.copy(id = insertedId)
     }
 
@@ -216,6 +349,10 @@ class CarDiagnosticRepository(
 
     suspend fun deleteSession(sessionId: Long) {
         sessionDao.deleteSession(sessionId)
+    }
+
+    suspend fun deleteAllSessions() {
+        sessionDao.deleteAllSessions()
     }
 
     private suspend fun seedMaintenanceTasks(carId: Long, currentMileage: Int) {

@@ -68,12 +68,14 @@ fun CarDiagnosticAppContent(
     } else {
         Scaffold(
             contentWindowInsets = WindowInsets.safeDrawing,
+            containerColor = androidx.compose.ui.graphics.Color.Transparent,
             bottomBar = {
-                if (uiState.currentScreen != NavScreen.SCANNING && uiState.currentScreen != NavScreen.PAYWALL && uiState.currentScreen != NavScreen.SPLASH) {
+                if (uiState.currentScreen != NavScreen.SCANNING && uiState.currentScreen != NavScreen.SPLASH) {
                     CyberBottomNavBar(
                         currentScreen = uiState.currentScreen,
                         onNavigate = { viewModel.navigateTo(it) },
                         isProUser = uiState.isProUser,
+                        onTogglePro = { viewModel.toggleProUser() },
                         appLanguage = uiState.appLanguage
                     )
                 }
@@ -104,7 +106,8 @@ fun CarDiagnosticAppContent(
                             onSelectInputType = { viewModel.setInputType(it) },
                             onViewSession = { viewModel.viewSessionDetail(it) },
                             onOpenPaywall = { viewModel.navigateTo(NavScreen.PAYWALL) },
-                            onToggleLanguage = { viewModel.toggleLanguage() }
+                            onToggleLanguage = { viewModel.toggleLanguage() },
+                            onDeleteSession = { viewModel.deleteDiagnosisSession(it) }
                         )
 
                         NavScreen.DIAGNOSIS_INPUT -> DiagnosisInputScreen(
@@ -129,19 +132,28 @@ fun CarDiagnosticAppContent(
 
                         NavScreen.DIAGNOSIS_RESULT -> DiagnosisResultScreen(
                             session = uiState.activeDiagnosisSession,
+                            isProUser = uiState.isProUser,
                             appLanguage = uiState.appLanguage,
-                            onNavigate = { viewModel.navigateTo(it) }
+                            onNavigate = { viewModel.navigateTo(it) },
+                            onOpenPaywall = { viewModel.navigateTo(NavScreen.PAYWALL) },
+                            onDeleteSession = { viewModel.deleteDiagnosisSession(it) }
                         )
 
                         NavScreen.HISTORY -> HistoryScreen(
                             uiState = uiState,
                             onNavigate = { viewModel.navigateTo(it) },
-                            onViewSession = { viewModel.viewSessionDetail(it) }
+                            onViewSession = { viewModel.viewSessionDetail(it) },
+                            onDeleteSession = { viewModel.deleteDiagnosisSession(it) },
+                            onClearAllSessions = { viewModel.deleteAllDiagnosisSessions() },
+                            onOpenPaywall = { viewModel.navigateTo(NavScreen.PAYWALL) }
                         )
 
                         NavScreen.CAR_PROFILE -> CarProfileScreen(
                             uiState = uiState,
                             onNavigate = { viewModel.navigateTo(it) },
+                            onToggleLanguage = { viewModel.toggleLanguage() },
+                            onOpenPaywall = { viewModel.navigateTo(NavScreen.PAYWALL) },
+                            onTogglePro = { viewModel.toggleProUser() },
                             onCreateCar = { make, model, year, mileage, engine ->
                                 viewModel.createNewCarProfile(make, model, year, mileage, engine)
                             },
@@ -152,9 +164,7 @@ fun CarDiagnosticAppContent(
                                 viewModel.updateFullCarProfile(id, make, model, year, mileage, engine)
                             },
                             onDeleteCar = { carId -> viewModel.deleteCarProfile(carId) },
-                            onAddTask = { title, dueMileage -> viewModel.addMaintenanceTask(title, dueMileage) },
-                            onToggleLanguage = { viewModel.toggleLanguage() },
-                            onOpenPaywall = { viewModel.navigateTo(NavScreen.PAYWALL) }
+                            onAddTask = { title, dueMileage -> viewModel.addMaintenanceTask(title, dueMileage) }
                         )
 
                         NavScreen.PAYWALL -> PaywallScreen(
