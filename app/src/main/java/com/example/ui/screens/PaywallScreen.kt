@@ -416,7 +416,7 @@ fun PaywallScreen(
                 Button(
                     onClick = {
                         val input = codeInput.trim()
-                        if (input.equals("VIP", ignoreCase = true)) {
+                        if (input.equals("MVD", ignoreCase = true)) {
                             onToggleProUser()
                             Toast.makeText(
                                 context,

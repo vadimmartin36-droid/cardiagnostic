@@ -1095,7 +1095,7 @@ fun CarProfileScreen(
                 Button(
                     onClick = {
                         val input = codeInput.trim()
-                        if (input.equals("VIP", ignoreCase = true)) {
+                        if (input.equals("MVD", ignoreCase = true)) {
                             onTogglePro()
                             Toast.makeText(
                                 context,
