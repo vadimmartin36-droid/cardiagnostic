@@ -244,7 +244,7 @@ private fun HeaderBar(
                 .background(CyberSurfaceVariant)
         ) {
             AsyncImage(
-                model = R.drawable.img_app_logo_v3_1787825693943,
+                model = R.drawable.img_app_logo_new_1788005791440,
                 contentDescription = "App Logo",
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize()

@@ -225,7 +225,7 @@ fun SplashScreen(
                         modifier = Modifier.fillMaxSize()
                     ) {
                         AsyncImage(
-                            model = R.drawable.img_app_logo_v3_1787825693943,
+                            model = R.drawable.img_app_logo_new_1788005791440,
                             contentDescription = "CarDiagnostic AI Logo",
                             contentScale = ContentScale.Crop,
                             modifier = Modifier
